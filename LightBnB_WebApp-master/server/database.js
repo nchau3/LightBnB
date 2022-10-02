@@ -132,13 +132,43 @@ exports.getAllReservations = getAllReservations;
  */
 const getAllProperties = function(options, limit = 10) {
 
-const queryString = `
-SELECT *
+const queryParams = [];
+
+let queryString = `
+SELECT properties.*, avg(property_reviews.rating) as average_rating
 FROM properties
-LIMIT $1`;
+JOIN property_reviews ON properties.id = property_id
+`;
+
+//return properties by owner
+if (options.owner_id) {
+  queryParams.push(`%${options.owner_id}%`);
+  queryString += `WHERE owner_id LIKE $${queryParams.length} `;
+}
+
+//return properties within given price range
+if (options.minimum_price_per_night && options.maximum_price_per_night) {
+  queryParams.push(`%${options.minimum_price_per_night}%`);
+  queryString += `WHERE cost_per_night > $${queryParams.length}`;
+  queryParams.push(`%${options.maximum_price_per_night}%`);
+  queryString += `AND cost_per_night < $${queryParams.length}`;
+}
+
+//return properties at minimum rating or higher
+if (options.minimum_rating) {
+  queryParams.push(`%${options.minimum_rating}%`);
+  queryString += `WHERE property_reviews.rating > $${queryParams.length} `;
+}
+
+queryParams.push(limit);
+queryString += `
+GROUP BY properties.id
+ORDER BY cost_per_night
+LIMIT $${queryParams.length};
+`;
 
 return pool
-  .query(queryString, [limit])
+  .query(queryString, queryParams)
   .then(result => {
       return result.rows;
     })
